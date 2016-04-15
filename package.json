@@ -1,0 +1,21 @@
+{
+  "name": "homebridge-foscam2",
+  "description": "Foscam Plugin for HomeBridge (API 2.0): https://github.com/nfarina/homebridge",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/luisiam/homebridge-foscam2.git"
+  },
+  "license": "ISC",
+  "preferGlobal": true,
+  "keywords": [
+    "homebridge-plugin"
+  ],
+  "engines": {
+    "node": ">=0.12.0",
+    "homebridge": ">=0.3.0"
+  },
+  "dependencies": {
+    "foscam-client": ">=0.3.0"
+  }
+}
