@@ -243,7 +243,7 @@ FoscamPlatform.prototype.getCurrentState = function(data, callback) {
         callback(null, data.currentState);
       } else {
         callback(new Error("Failed to retrieve current state!"));
-    }
+      }
     })
     .catch(function(error) {
       // Set status fault to 1 in case of error
@@ -303,7 +303,7 @@ FoscamPlatform.prototype.setTargetState = function(data, state, callback) {
       callback(null);
     } else {
       callback(new Error("Failed to set target state!"));
-  }
+    }
   })
   .catch(function(error) {
     // Set status fault to 1 in case of error
