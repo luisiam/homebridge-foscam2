@@ -10,9 +10,7 @@ module.exports = function(homebridge) {
   Characteristic = homebridge.hap.Characteristic;
   UUIDGen = homebridge.hap.uuid;
 
-  /**
-   * Characteristic "Snapshot"
-   */
+  // Characteristic "Snapshot"
   Snapshot = function () {
     Characteristic.call(this, 'Snapshot', 'B895211C-0587-11E6-8CEC-00089BDF8CC3');
     this.setProps({
@@ -32,7 +30,7 @@ function FoscamPlatform(log, config, api) {
   var self = this;
 
   self.log = log;
-  self.config = config || { "platform": "Foscam2" };
+  self.config = config || {"platform": "Foscam2"};
   self.cameras = self.config.cameras || [];
 
   self.accessories = {};
@@ -118,14 +116,7 @@ FoscamPlatform.prototype.addAccessory = function(camera) {
     newAccessory.getService(Service.SecuritySystem).addCharacteristic(Snapshot);
 
     // Setup HomeKit accessory information
-    var info = newAccessory.getService(Service.AccessoryInformation);
-    info.setCharacteristic(Characteristic.Manufacturer, "Foscam Digital Technology LLC");
-    if (self.cameraInfo[camera.name][0]) {
-      info.setCharacteristic(Characteristic.Model, self.cameraInfo[camera.name][0]);
-    }
-    if (self.cameraInfo[camera.name][1]) {
-      info.setCharacteristic(Characteristic.SerialNumber, self.cameraInfo[camera.name][1]);
-    }
+    newAccessory = self.setAccessoryInfo(newAccessory);
 
     // Setup listeners for different security system events
     newAccessory = self.setService(newAccessory);
@@ -145,13 +136,7 @@ FoscamPlatform.prototype.addAccessory = function(camera) {
     newAccessory.context.conversion = conversion;
 
     // Update HomeKit accessory information
-    var info = newAccessory.getService(Service.AccessoryInformation);
-    if (self.cameraInfo[camera.name][0]) {
-      info.setCharacteristic(Characteristic.Model, self.cameraInfo[camera.name][0]);
-    }
-    if (self.cameraInfo[camera.name][1]) {
-      info.setCharacteristic(Characteristic.SerialNumber, self.cameraInfo[camera.name][1]);
-    }
+    newAccessory = self.setAccessoryInfo(newAccessory);
 
     // Update accessory in HomeKit
     self.api.updatePlatformAccessories([newAccessory]);
@@ -199,6 +184,27 @@ FoscamPlatform.prototype.setService = function(accessory) {
     .on('set', self.takeSnapshot.bind(this, accessory.context));
 
   accessory.on('identify', self.identify.bind(this, accessory.context));
+
+  return accessory;
+}
+
+// Method to setup HomeKit accessory information
+FoscamPlatform.prototype.setAccessoryInfo = function(accessory) {
+  var self = this;
+  var name = accessory.context.name;
+
+  accessory
+    .getService(Service.AccessoryInformation)
+    .setCharacteristic(Characteristic.Manufacturer, "Foscam Digital Technology LLC");
+
+  if (self.cameraInfo[name]) {
+    accessory
+      .getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Model, self.cameraInfo[name][0])
+      .setCharacteristic(Characteristic.SerialNumber, self.cameraInfo[name][1])
+      .setCharacteristic(Characteristic.FirmwareRevision, self.cameraInfo[name][2])
+      .setCharacteristic(Characteristic.HardwareRevision, self.cameraInfo[name][3]);
+  }
 
   return accessory;
 }
@@ -414,7 +420,12 @@ FoscamPlatform.prototype.detectAPI = function(data) {
 
   // Retrieve info for new camera
   self.foscamAPI[data.name].getDevInfo().then(function(info) {
-    self.cameraInfo[data.name] = [info.productName.toString(), info.serialNo.toString()];
+    self.cameraInfo[data.name] = [
+      info.productName.toString(),
+      info.serialNo.toString(),
+      info.firmwareVer.toString(),
+      info.hardwareVer.toString()
+    ];
   })
   .catch(function(error) {
     self.log(error);
