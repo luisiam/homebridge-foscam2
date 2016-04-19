@@ -1,4 +1,7 @@
 var foscam = require("foscam-client");
+var fs = require("fs");
+var mkdirp = require("mkdirp");
+var inherits = require('util').inherits;
 var Accessory, Service, Characteristic, UUIDGen;
 
 module.exports = function(homebridge) {
@@ -6,6 +9,21 @@ module.exports = function(homebridge) {
   Service = homebridge.hap.Service;
   Characteristic = homebridge.hap.Characteristic;
   UUIDGen = homebridge.hap.uuid;
+
+  /**
+   * Characteristic "Snapshot"
+   */
+  Snapshot = function () {
+    Characteristic.call(this, 'Snapshot', 'B895211C-0587-11E6-8CEC-00089BDF8CC3');
+    this.setProps({
+      format: Characteristic.Formats.BOOL,
+      perms: [Characteristic.Perms.READ, Characteristic.Perms.WRITE, Characteristic.Perms.NOTIFY]
+    });
+    this.value = this.getDefaultValue();
+  };
+  inherits(Snapshot, Characteristic);
+
+  Snapshot.UUID = 'B895211C-0587-11E6-8CEC-00089BDF8CC3';
 
   homebridge.registerPlatform("homebridge-foscam2", "Foscam2", FoscamPlatform, true);
 }
@@ -46,31 +64,28 @@ FoscamPlatform.prototype.configureAccessory = function(accessory) {
   self.accessories[accessoryName] = accessory;
 }
 
-// Method to setup new accesories from config.json
+// Method to setup accesories from config.json
 FoscamPlatform.prototype.didFinishLaunching = function() {
   var self = this;
 
   for (var i in self.cameras) {
     var camera = self.cameras[i];
-    if (!self.accessories[camera.name]) {
 
-      // Detect API and retrieve info for new camera
-      self.detectAPI(camera);
+    // Detect API and retrieve info for new camera
+    self.detectAPI(camera);
 
-      // Try to wait for detectAPI to finish
-      setTimeout(self.addAccessory.bind(this, camera), 2000);
-    }
+    // Try to wait for detectAPI to finish
+    setTimeout(self.addAccessory.bind(this, camera), 8000);
   }
 }
 
-// Method to setup new accessories added from HomeKit app
+// Method to add and update HomeKit accessories
 FoscamPlatform.prototype.addAccessory = function(camera) {
   var self = this;
-  var uuid = UUIDGen.generate(camera.name);
 
   var conversion = [camera.stay, camera.away, camera.night];
 
-  if (this.cameraVer[camera.name] == 0) {
+  if (self.cameraVer[camera.name] == 0) {
     // Older models only support 4-bit linkage
     conversion = conversion.map(function(k) {return (k & 0x0f)});
   } else {
@@ -78,43 +93,71 @@ FoscamPlatform.prototype.addAccessory = function(camera) {
     conversion = conversion.map(function(k) {return (k & 0x8f)});
   }
 
-  // Setup accessory as ALARM_SYSTEM (11) category.
-  var newAccessory = new Accessory(camera.name, uuid, 11);
+  if (!self.accessories[camera.name]) {
+    var uuid = UUIDGen.generate(camera.name);
 
-  // Store and initialize variables into context
-  newAccessory.context.name = camera.name;
-  newAccessory.context.username = camera.username;
-  newAccessory.context.password = camera.password;
-  newAccessory.context.host = camera.host;
-  newAccessory.context.port = camera.port;
-  newAccessory.context.conversion = conversion;
-  newAccessory.context.currentState = Characteristic.SecuritySystemCurrentState.DISARMED;
-  newAccessory.context.targetState = Characteristic.SecuritySystemTargetState.DISARM;
-  newAccessory.context.statusFault = 0;
+    // Setup accessory as ALARM_SYSTEM (11) category.
+    var newAccessory = new Accessory(camera.name, uuid, 11);
 
-  // Setup HomeKit security system service
-  newAccessory.addService(Service.SecuritySystem, camera.name);
+    // Store and initialize variables into context
+    newAccessory.context.name = camera.name;
+    newAccessory.context.username = camera.username;
+    newAccessory.context.password = camera.password;
+    newAccessory.context.host = camera.host;
+    newAccessory.context.port = camera.port;
+    newAccessory.context.path = camera.path;
+    newAccessory.context.conversion = conversion;
+    newAccessory.context.currentState = Characteristic.SecuritySystemCurrentState.DISARMED;
+    newAccessory.context.targetState = Characteristic.SecuritySystemTargetState.DISARM;
+    newAccessory.context.statusFault = 0;
 
-  // Setup HomeKit accessory information
-  var info = newAccessory.getService(Service.AccessoryInformation);
-  info.setCharacteristic(Characteristic.Manufacturer, "Foscam Digital Technology LLC");
-  if (self.cameraInfo[camera.name][0]) {
-    info.setCharacteristic(Characteristic.Model, self.cameraInfo[camera.name][0]);
-  }
-  if (self.cameraInfo[camera.name][1]) {
-    info.setCharacteristic(Characteristic.SerialNumber, self.cameraInfo[camera.name][1]);
-  }
+    // Setup HomeKit security system service
+    newAccessory.addService(Service.SecuritySystem, camera.name);
 
-  // Setup listeners for different security system events
-  newAccessory = self.setService(newAccessory);
+    // Add custom snapshot switch
+    newAccessory.getService(Service.SecuritySystem).addCharacteristic(Snapshot);
 
-  // Register or update accessory in HomeKit
-  if (self.accessories[camera.name]) {
-    self.api.updatePlatformAccessories([newAccessory]);
-  } else {
+    // Setup HomeKit accessory information
+    var info = newAccessory.getService(Service.AccessoryInformation);
+    info.setCharacteristic(Characteristic.Manufacturer, "Foscam Digital Technology LLC");
+    if (self.cameraInfo[camera.name][0]) {
+      info.setCharacteristic(Characteristic.Model, self.cameraInfo[camera.name][0]);
+    }
+    if (self.cameraInfo[camera.name][1]) {
+      info.setCharacteristic(Characteristic.SerialNumber, self.cameraInfo[camera.name][1]);
+    }
+
+    // Setup listeners for different security system events
+    newAccessory = self.setService(newAccessory);
+
+    // Register accessory in HomeKit
     self.api.registerPlatformAccessories("homebridge-foscam2", "Foscam2", [newAccessory]);
+  } else {
+    // Retrieve accessory from cache
+    var newAccessory = self.accessories[camera.name];
+
+    // Update variables in context
+    newAccessory.context.username = camera.username;
+    newAccessory.context.password = camera.password;
+    newAccessory.context.host = camera.host;
+    newAccessory.context.port = camera.port;
+    newAccessory.context.path = camera.path;
+    newAccessory.context.conversion = conversion;
+
+    // Update HomeKit accessory information
+    var info = newAccessory.getService(Service.AccessoryInformation);
+    if (self.cameraInfo[camera.name][0]) {
+      info.setCharacteristic(Characteristic.Model, self.cameraInfo[camera.name][0]);
+    }
+    if (self.cameraInfo[camera.name][1]) {
+      info.setCharacteristic(Characteristic.SerialNumber, self.cameraInfo[camera.name][1]);
+    }
+
+    // Update accessory in HomeKit
+    self.api.updatePlatformAccessories([newAccessory]);
   }
 
+  // Store accessory in cache
   self.accessories[camera.name] = newAccessory;
 }
 
@@ -149,6 +192,11 @@ FoscamPlatform.prototype.setService = function(accessory) {
     .getService(Service.SecuritySystem)
     .getCharacteristic(Characteristic.StatusFault)
     .on('get', self.getStatusFault.bind(this, accessory.context));
+
+  accessory
+    .getService(Service.SecuritySystem)
+    .getCharacteristic(Snapshot)
+    .on('set', self.takeSnapshot.bind(this, accessory.context));
 
   accessory.on('identify', self.identify.bind(this, accessory.context));
 
@@ -195,7 +243,7 @@ FoscamPlatform.prototype.getCurrentState = function(data, callback) {
         callback(null, data.currentState);
       } else {
         callback(new Error("Failed to retrieve current state!"));
-	  }
+    }
     })
     .catch(function(error) {
       // Set status fault to 1 in case of error
@@ -207,7 +255,6 @@ FoscamPlatform.prototype.getCurrentState = function(data, callback) {
     // Set status fault to 1 in case of error
     data.statusFault = 1;
 
-    self.log(name + error);
     callback(error);
   });
 }
@@ -256,7 +303,7 @@ FoscamPlatform.prototype.setTargetState = function(data, state, callback) {
       callback(null);
     } else {
       callback(new Error("Failed to set target state!"));
-	}
+  }
   })
   .catch(function(error) {
     // Set status fault to 1 in case of error
@@ -270,6 +317,48 @@ FoscamPlatform.prototype.getStatusFault = function(data, callback) {
   setTimeout(function() {
     callback(null, data.statusFault);
   }, 1000);
+}
+
+// Method to take snapshots
+FoscamPlatform.prototype.takeSnapshot = function(data, snapshot, callback) {
+  if(snapshot){
+    var self = this;
+    var name = "[" + data.name + "] ";
+
+    self.foscamAPI[data.name].snapPicture2().then(function(jpeg){
+      // Create directory for snapshots
+      mkdirp(data.path, function(error){
+        if(error){
+          self.log(name + "Snapshot directory cannot be created.");
+        } else {
+          var timeStamp = new Date();
+
+          // Write data as jpeg file to predefined directory
+          fs.writeFile(data.path + "/snap_" + timeStamp.valueOf() + ".jpeg", jpeg, function(error){
+            if(error){
+              self.log(name + "Snapshot cannot be saved.");
+            } else {
+              self.log(name + "Took a snapshot.");
+
+              // Set switch back to off after 1s
+              setTimeout(function(name) {
+                self.accessories[name]
+                  .getService(Service.SecuritySystem)
+                  .setCharacteristic(Snapshot, 0);
+              }.bind(self, data.name), 1000);
+            }
+          });
+        }
+      });
+      callback(null);
+    })
+    .catch(function(error){
+        callback(error);
+    });
+
+  } else {
+    callback(null);
+  }
 }
 
 // Method to handle identify request
@@ -324,14 +413,12 @@ FoscamPlatform.prototype.detectAPI = function(data) {
   });
 
   // Retrieve info for new camera
-  if (!self.accessories[data.name]) {
-    self.foscamAPI[data.name].getDevInfo().then(function(info) {
-      self.cameraInfo[data.name] = [info.productName.toString(), info.serialNo.toString()];
-    })
-    .catch(function(error) {
-      self.log(error);
-    });
-  }
+  self.foscamAPI[data.name].getDevInfo().then(function(info) {
+    self.cameraInfo[data.name] = [info.productName.toString(), info.serialNo.toString()];
+  })
+  .catch(function(error) {
+    self.log(error);
+  });
 }
 
 // Method to handle plugin configuration in HomeKit app
@@ -399,6 +486,10 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
               "id": "port",
               "title": "IP Camera Port (Default 88)",
               "placeholder": "88"
+            }, {
+              "id": "path",
+              "title": "Local Path for Snapshots (Required)",
+              "placeholder": "/home/pi/Foscam"
             }]
           };
 
@@ -458,12 +549,14 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
             context.data.password = userInputs.password || accessory.context.password;
             context.data.host = userInputs.host || accessory.context.host;
             context.data.port = userInputs.port || accessory.context.port;
+            context.data.path = userInputs.path || accessory.context.path;
           } else {
             context.data.name = userInputs.name;
             context.data.username = userInputs.username || "admin";
             context.data.password = userInputs.password;
             context.data.host = userInputs.host;
             context.data.port = userInputs.port || 88;
+            context.data.path = userInputs.path;
           }
 
           // API detection
@@ -529,7 +622,7 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
           newCamera.serial = this.cameraInfo[context.data.name][1];
         }
 
-        if (newCamera.name && newCamera.password && newCamera.host) {
+        if (newCamera.name && newCamera.password && newCamera.host && newCamera.path) {
           // Register or update accessory in HomeKit
           this.addAccessory(newCamera);
           var respDict = {
@@ -581,6 +674,10 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
               "id": "port",
               "title": "IP Camera Port",
               "placeholder": "Leave blank if unchanged"
+            }, {
+              "id": "path",
+              "title": "Local Path for Snapshots",
+              "placeholder": "Leave blank if unchanged"
             }]
           };
 
@@ -617,7 +714,8 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
             'port': accessory.context.port,
             'stay': accessory.context.conversion[0],
             'away': accessory.context.conversion[1],
-            'night': accessory.context.conversion[2]
+            'night': accessory.context.conversion[2],
+            'path': accessory.context.path
           };
           return data;
         });
