@@ -29,7 +29,8 @@ This step is not required. HomeBridge with API 2.0 can handle configurations in 
         "port": "88",
         "stay": "13",
         "away": "15",
-        "night": "14"
+        "night": "14",
+        "path": "Local path for snapshots"
     }]
 }]
 
