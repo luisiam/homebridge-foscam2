@@ -43,7 +43,6 @@ function FoscamPlatform(log, config, api) {
     self.api.on('didFinishLaunching', self.didFinishLaunching.bind(this));
   }
 
-  // Definition Mapping
   // HomeKit Current State: 0 (STAY_ARM), 1 (AWAY_ARM), 2 (NIGHT_ARM), 3 (DISARMED), 4 (ALARM_TRIGGERED)
   self.armState = ["Armed (Stay).", "Armed (Away).", "Armed (Night).", "Disarmed.", "Alarm Triggered."]
 }
@@ -54,7 +53,6 @@ FoscamPlatform.prototype.configureAccessory = function(accessory) {
 
   accessory.reachable = true;
 
-//  self.detectAPI(accessory.context);
   accessory = self.setService(accessory);
 
   var accessoryName = accessory.context.name;
@@ -68,16 +66,75 @@ FoscamPlatform.prototype.didFinishLaunching = function() {
   for (var i in self.cameras) {
     var camera = self.cameras[i];
 
-    // Detect API and retrieve info for new camera
-    self.detectAPI(camera);
-
-    // Try to wait for detectAPI to finish
-    setTimeout(self.addAccessory.bind(this, camera), 10000);
+    // Register or update accessory in HomeKit
+    self.addAccessory(camera);
   }
 }
 
-// Method to add and update HomeKit accessories
+// Method to add or update HomeKit accessories
 FoscamPlatform.prototype.addAccessory = function(camera) {
+  var self = this;
+
+  self.detectAPI(camera, function(camera, error){
+    if (!error) {
+      self.configureCamera(camera, function(accessory){
+        if (!self.accessories[accessory.context.name]) {
+          self.api.registerPlatformAccessories("homebridge-foscam2", "Foscam2", [accessory]);
+        } else {
+          self.api.updatePlatformAccessories([accessory]);
+        }
+      });
+    } else {
+      self.log(error);
+    }
+  });
+}
+
+// Method to detect Foscam API version and camera info
+FoscamPlatform.prototype.detectAPI = function(camera, callback) {
+  var self = this;
+  var name = "[" + camera.name + "] ";
+
+  // Setup for foscam-client
+  self.foscamAPI[camera.name] = new foscam({
+    username: camera.username,
+    password: camera.password,
+    host: camera.host,
+    port: camera.port,
+    protocol: 'http',
+    rejectUnauthorizedCerts: true
+  });
+
+  // Detect API
+  self.foscamAPI[camera.name].getMotionDetectConfig().then(function(config) {
+    if (config.result == 0) {
+      self.cameraVer[camera.name] = 0;
+    } else {
+      self.cameraVer[camera.name] = 1;
+    }
+
+    // Retrieve camera info
+    self.foscamAPI[camera.name].getDevInfo().then(function(info) {
+      self.cameraInfo[camera.name] = [
+        info.productName.toString(),
+        info.serialNo.toString(),
+        info.firmwareVer.toString(),
+        info.hardwareVer.toString()
+      ];
+
+      callback(camera);
+    })
+    .catch(function(error) {
+      callback(camera, name + "Failed to retrieve camera information!");
+    });
+  })
+  .catch(function(error) {
+    callback(camera, name + "Failed to detect API version!");
+  });
+}
+
+// Method to configure camera info for HomeKit
+FoscamPlatform.prototype.configureCamera = function(camera, callback) {
   var self = this;
 
   var conversion = [camera.stay, camera.away, camera.night];
@@ -114,17 +171,8 @@ FoscamPlatform.prototype.addAccessory = function(camera) {
     // Add custom snapshot switch
     newAccessory.getService(Service.SecuritySystem).addCharacteristic(Snapshot);
 
-    // Setup HomeKit accessory information
-    newAccessory = self.setAccessoryInfo(newAccessory);
-
     // Setup listeners for different security system events
     newAccessory = self.setService(newAccessory);
-
-    // Retrieve initial state
-    newAccessory = self.getInitState(newAccessory);
-
-    // Register accessory in HomeKit
-    self.api.registerPlatformAccessories("homebridge-foscam2", "Foscam2", [newAccessory]);
   } else {
     // Retrieve accessory from cache
     var newAccessory = self.accessories[camera.name];
@@ -136,19 +184,18 @@ FoscamPlatform.prototype.addAccessory = function(camera) {
     newAccessory.context.port = camera.port;
     newAccessory.context.path = camera.path;
     newAccessory.context.conversion = conversion;
-
-    // Update HomeKit accessory information
-    newAccessory = self.setAccessoryInfo(newAccessory);
-
-    // Update initial state
-    newAccessory = self.getInitState(newAccessory);
-
-    // Update accessory in HomeKit
-    self.api.updatePlatformAccessories([newAccessory]);
   }
+
+  // Setup HomeKit accessory information
+  newAccessory = self.setAccessoryInfo(newAccessory);
+
+  // Retrieve initial state
+  newAccessory = self.getInitState(newAccessory);
 
   // Store accessory in cache
   self.accessories[camera.name] = newAccessory;
+
+  callback(newAccessory);
 }
 
 // Method to remove accessories from HomeKit
@@ -246,48 +293,34 @@ FoscamPlatform.prototype.getCurrentState = function(data, callback) {
     var getConfig = foscamAPI[data.name].getMotionDetectConfig1();
   }
 
-  self.foscamAPI[data.name].getDevState().then(function(state) {
-    getConfig.then(function(config) {
-      // Set status fault accordingly
-      if ((state.result | config.result) == 0) {
-        data.statusFault = 0;
-      } else {
-        data.statusFault = 1;
-      }
-
-      if (!data.statusFault) {
-        // Compute current state and target state
-        if (config.isEnable == 0) {
-          data.currentState = Characteristic.SecuritySystemCurrentState.DISARMED;
-          data.targetState = Characteristic.SecuritySystemTargetState.DISARM;
-        } else {
-          if (data.conversion.indexOf(config.linkage) >= 0) {
-            data.currentState = data.conversion.indexOf(config.linkage);
-            data.targetState = data.conversion.indexOf(config.linkage);
-          } else {
-            data.currentState = Characteristic.SecuritySystemCurrentState.STAY_ARM;
-            data.targetState = Characteristic.SecuritySystemTargetState.STAY_ARM;
-          }
-        }
-
-        // Detect for alarm triggered
-        if (state.motionDetectAlarm == 2) {
-          self.log(name + "Motion detected!");
-          data.currentState = Characteristic.SecuritySystemCurrentState.ALARM_TRIGGERED;
-        }
-
-        self.log(name + "Current state: " + self.armState[data.currentState]);
-        callback(null, data.currentState);
-      } else {
-        callback(new Error("Failed to retrieve current state!"));
-      }
-    })
-    .catch(function(error) {
-      // Set status fault to 1 in case of error
+  getConfig.then(function(config) {
+    // Set status fault accordingly
+    if (config.result == 0) {
+      data.statusFault = 0;
+    } else {
       data.statusFault = 1;
+    }
 
-      callback(error);
-    });
+    if (!data.statusFault) {
+      // Compute current state and target state
+      if (config.isEnable == 0) {
+        data.currentState = Characteristic.SecuritySystemCurrentState.DISARMED;
+        data.targetState = Characteristic.SecuritySystemTargetState.DISARM;
+      } else {
+        if (data.conversion.indexOf(config.linkage) >= 0) {
+          data.currentState = data.conversion.indexOf(config.linkage);
+          data.targetState = data.conversion.indexOf(config.linkage);
+        } else {
+          data.currentState = Characteristic.SecuritySystemCurrentState.STAY_ARM;
+          data.targetState = Characteristic.SecuritySystemTargetState.STAY_ARM;
+        }
+      }
+
+      self.log(name + "Current state: " + self.armState[data.currentState]);
+      callback(null, data.currentState);
+    } else {
+      callback(new Error("Failed to retrieve current state!"));
+    }
   })
   .catch(function(error) {
     // Set status fault to 1 in case of error
@@ -429,45 +462,6 @@ FoscamPlatform.prototype.computeLinkage = function(selections) {
   return linkage;
 }
 
-// Method to detect Foscam API version and camera info
-FoscamPlatform.prototype.detectAPI = function(data) {
-  var self = this;
-
-  self.foscamAPI[data.name] = new foscam({
-    username: data.username,
-    password: data.password,
-    host: data.host,
-    port: data.port,
-    protocol: 'http',
-    rejectUnauthorizedCerts: true
-  });
-
-  // Detect API
-  self.foscamAPI[data.name].getMotionDetectConfig().then(function(config) {
-    if (config.result == 0) {
-      self.cameraVer[data.name] = 0;
-    } else {
-      self.cameraVer[data.name] = 1;
-    }
-  })
-  .catch(function(error) {
-    self.log("Failed to detect API version!");
-  });
-
-  // Retrieve info for new camera
-  self.foscamAPI[data.name].getDevInfo().then(function(info) {
-    self.cameraInfo[data.name] = [
-      info.productName.toString(),
-      info.serialNo.toString(),
-      info.firmwareVer.toString(),
-      info.hardwareVer.toString()
-    ];
-  })
-  .catch(function(error) {
-    self.log("Failed to retrieve camera information!");
-  });
-}
-
 // Method to handle plugin configuration in HomeKit app
 FoscamPlatform.prototype.configurationRequestHandler = function(context, request, callback) {
   if (request && request.type === "Terminate") {
@@ -585,54 +579,20 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
         // Configure Stay, Away, Night arm
         if (context.stateConfig == 0) {
           var title = "Configure Stay Arm";
-          var userInputs = request.response.inputs;
-          context.data = {};
 
-          // Info for API detection
-          if (context.selected) {
-            var accessory = this.accessories[context.selected];
-            context.data.name = context.selected;
-            context.data.username = userInputs.username || accessory.context.username;
-            context.data.password = userInputs.password || accessory.context.password;
-            context.data.host = userInputs.host || accessory.context.host;
-            context.data.port = userInputs.port || accessory.context.port;
-            context.data.path = userInputs.path || accessory.context.path;
-          } else {
-            context.data.name = userInputs.name;
-            context.data.username = userInputs.username || "admin";
-            context.data.password = userInputs.password;
-            context.data.host = userInputs.host;
-            context.data.port = userInputs.port || 88;
-            context.data.path = userInputs.path;
-          }
-
-          // API detection
-          this.detectAPI(context.data);
-
+          context.inputs = request.response.inputs;
           context.stateConfig = 1;
           context.step = 3;
         } else if (context.stateConfig == 1) {
           var title = "Configure Away Arm";
 
-          var stay = this.computeLinkage(request.response.selections);
-          if (context.selected) {
-            var accessory = this.accessories[context.selected];
-            stay = stay || accessory.context.conversion[0];
-          }
-
-          context.data.stay = stay;
+          context.inputs.stay = this.computeLinkage(request.response.selections);
           context.stateConfig = 2;
           context.step = 3;
         } else {
           var title = "Configure Night Arm";
 
-          var away = this.computeLinkage(request.response.selections);
-          if (context.selected) {
-            var accessory = this.accessories[context.selected];
-            away = away || accessory.context.conversion[1];
-          }
-
-          context.data.away = away;
+          context.inputs.away = this.computeLinkage(request.response.selections);
           delete context.stateConfig;
           context.step = 4;
         }
@@ -654,24 +614,39 @@ FoscamPlatform.prototype.configurationRequestHandler = function(context, request
         callback(respDict);
         break;
       case 4:
-        var night = this.computeLinkage(request.response.selections);
+        context.inputs.night = this.computeLinkage(request.response.selections);
+        var userInputs = context.inputs;
+        var newCamera = {};
+
+        // Setup info for registering or updating accessory
         if (context.selected) {
           var accessory = this.accessories[context.selected];
-          night = night || accessory.context.conversion[2];
+          newCamera.name = context.selected;
+          newCamera.username = userInputs.username || accessory.context.username;
+          newCamera.password = userInputs.password || accessory.context.password;
+          newCamera.host = userInputs.host || accessory.context.host;
+          newCamera.port = userInputs.port || accessory.context.port;
+          newCamera.path = userInputs.path || accessory.context.path;
+          newCamera.stay = userInputs.stay || accessory.context.conversion[0];
+          newCamera.away = userInputs.away || accessory.context.conversion[1];
+          newCamera.night = userInputs.night || accessory.context.conversion[2];
+        } else {
+          newCamera.name = userInputs.name;
+          newCamera.username = userInputs.username || "admin";
+          newCamera.password = userInputs.password;
+          newCamera.host = userInputs.host;
+          newCamera.port = userInputs.port || 88;
+          newCamera.path = userInputs.path;
+          newCamera.stay = userInputs.stay;
+          newCamera.away = userInputs.away;
+          newCamera.night = userInputs.night;
         }
 
-        context.data.night = night;
-
-        // Setup input for addAccessory
-        var newCamera = context.data;
-        if (!context.selected) {
-          newCamera.model = this.cameraInfo[context.data.name][0];
-          newCamera.serial = this.cameraInfo[context.data.name][1];
-        }
-
+        // Check for required info
         if (newCamera.name && newCamera.password && newCamera.host && newCamera.path) {
           // Register or update accessory in HomeKit
           this.addAccessory(newCamera);
+
           var respDict = {
             "type": "Interface",
             "interface": "instruction",
