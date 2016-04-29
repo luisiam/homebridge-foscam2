@@ -291,7 +291,7 @@ FoscamPlatform.prototype.getCurrentState = function(data, callback) {
   if (self.cameraVer[data.name] == 0) {
     var getConfig = self.foscamAPI[data.name].getMotionDetectConfig();
   } else {
-    var getConfig = foscamAPI[data.name].getMotionDetectConfig1();
+    var getConfig = self.foscamAPI[data.name].getMotionDetectConfig1();
   }
 
   getConfig.then(function(config) {
@@ -349,7 +349,7 @@ FoscamPlatform.prototype.setTargetState = function(data, state, callback) {
     var setConfig = function(config) {self.foscamAPI[data.name].setMotionDetectConfig(config);};
   } else {
     var getConfig = self.foscamAPI[data.name].getMotionDetectConfig1();
-    var setConfig = function(config) {self.foscamAPI[data.name].setMotionDetectConfig(config);};
+    var setConfig = function(config) {self.foscamAPI[data.name].setMotionDetectConfig1(config);};
   }
 
   // Convert target state to isEnable
