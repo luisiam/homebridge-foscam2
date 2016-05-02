@@ -207,12 +207,12 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
 FoscamPlatform.prototype.removeAccessory = function(accessory) {
   if (accessory) {
     var name = accessory.context.name;
+    this.log("[" + name + "] Removed from HomeBridge.");
     this.api.unregisterPlatformAccessories("homebridge-foscam2", "Foscam2", [accessory]);
     delete this.accessories[name];
     delete this.foscamAPI[name];
     delete this.cameraVer[name];
     delete this.cameraInfo[name];
-    this.log("[" + name + "] Removed from HomeBridge.");
   }
 }
 
