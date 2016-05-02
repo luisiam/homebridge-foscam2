@@ -5,7 +5,7 @@ Older verion with API 1.0: [homebridge-foscam](https://github.com/rooi/homebridg
 
 # Installation
 1. Install homebridge using `npm install -g homebridge`.
-2. Install this plugin using `npm install -g homebridge-foscam2`.
+2. Install this plugin using `npm install -g git+https://github.com/luisiam/homebridge-foscam2.git`.
 3. Update your configuration file. See configuration sample below.
 
 # Configuration
