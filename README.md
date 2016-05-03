@@ -22,7 +22,6 @@ This step is not required. HomeBridge with API 2.0 can handle configurations in 
 "platforms": [{
     "platform": "Foscam2",
     "cameras": [{
-        "name" : "Entrance IP Camera",
         "username": "admin",
         "password": "password",
         "host": "192.168.1.10",
