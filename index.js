@@ -53,9 +53,16 @@ FoscamPlatform.prototype.configureAccessory = function(accessory) {
 
 // Method to setup accesories from config.json
 FoscamPlatform.prototype.didFinishLaunching = function() {
+  // Add or update accessory in HomeKit
   for (var i in this.cameras) {
-    // Add or update accessory in HomeKit
     this.addAccessory(this.cameras[i]);
+  }
+
+  // Remove extra accessories in cache
+  for (var mac in this.accessories) {
+    if (!this.cameraInfo[mac]) {
+      this.removeAccessory(this.accessories[mac]);
+    }
   }
 }
 
@@ -145,7 +152,7 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
     // Setup accessory as ALARM_SYSTEM (11) category.
     var newAccessory = new Accessory("Foscam " + camera.name, uuid, 11);
 
-    // Accessory is reachable after logged in
+    // New accessory is always reachable
     newAccessory.reachable = true;
 
     // Store and initialize variables into context
@@ -178,7 +185,7 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
     // Retrieve accessory from cache
     var newAccessory = this.accessories[camera.mac];
 
-    // Accessory is reachable after logged in
+    // Accessory is reachable after it's found in config.json
     newAccessory.updateReachability(true);
 
     // Update variables in context
@@ -191,9 +198,6 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
 
     // Retrieve initial state
     newAccessory = this.getInitState(newAccessory);
-
-    // Update accessory in HomeKit
-    this.api.updatePlatformAccessories([newAccessory]);
   }
 
   // Store accessory in cache
