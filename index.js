@@ -47,7 +47,6 @@ function FoscamPlatform(log, config, api) {
 // Method to restore accessories from cache
 FoscamPlatform.prototype.configureAccessory = function(accessory) {
   accessory = this.setService(accessory);
-
   var accessoryMAC = accessory.context.mac;
   this.accessories[accessoryMAC] = accessory;
 }
@@ -180,7 +179,7 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
     var newAccessory = this.accessories[camera.mac];
 
     // Accessory is reachable after logged in
-    newAccessory.reachable = true;
+    newAccessory.updateReachability(true);
 
     // Update variables in context
     newAccessory.context.username = camera.username;
