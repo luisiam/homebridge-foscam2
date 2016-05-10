@@ -46,24 +46,28 @@ function FoscamPlatform(log, config, api) {
 
 // Method to restore accessories from cache
 FoscamPlatform.prototype.configureAccessory = function(accessory) {
-  accessory = this.setService(accessory);
+  this.setService(accessory);
   var accessoryMAC = accessory.context.mac;
   this.accessories[accessoryMAC] = accessory;
 }
 
 // Method to setup accesories from config.json
 FoscamPlatform.prototype.didFinishLaunching = function() {
+  var self = this;
+
   // Add or update accessory in HomeKit
   for (var i in this.cameras) {
     this.addAccessory(this.cameras[i]);
   }
 
   // Remove extra accessories in cache
-  for (var mac in this.accessories) {
-    if (!this.cameraInfo[mac]) {
-      this.removeAccessory(this.accessories[mac]);
+  setTimeout(function() {
+    for (var mac in self.accessories) {
+      if (!self.cameraInfo[mac]) {
+        self.removeAccessory(self.accessories[mac]);
+      }
     }
-  }
+  }, 10000);
 }
 
 // Method to add or update HomeKit accessories
@@ -174,10 +178,10 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
     newAccessory.getService(Service.SecuritySystem).addCharacteristic(Snapshot);
 
     // Setup HomeKit accessory information
-    newAccessory = this.setAccessoryInfo(newAccessory);
+    this.setAccessoryInfo(newAccessory);
 
     // Setup listeners for different security system events
-    newAccessory = this.setService(newAccessory);
+    this.setService(newAccessory);
 
     // Register accessory in HomeKit
     this.api.registerPlatformAccessories("homebridge-foscam2", "Foscam2", [newAccessory]);
@@ -198,7 +202,7 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
   }
 
   // Retrieve initial state
-  newAccessory = this.getInitState(newAccessory);
+  this.getInitState(newAccessory);
 
   // Store accessory in cache
   this.accessories[camera.mac] = newAccessory;
@@ -242,8 +246,6 @@ FoscamPlatform.prototype.setService = function(accessory) {
 
   accessory
     .on('identify', this.identify.bind(this, accessory.context, accessory.displayName));
-
-  return accessory;
 }
 
 // Method to setup HomeKit accessory information
@@ -260,8 +262,6 @@ FoscamPlatform.prototype.setAccessoryInfo = function(accessory) {
       .setCharacteristic(Characteristic.Model, this.cameraInfo[mac].model)
       .setCharacteristic(Characteristic.SerialNumber, this.cameraInfo[mac].serial);
   }
-
-  return accessory;
 }
 
 // Method to retrieve initial state
@@ -288,8 +288,6 @@ FoscamPlatform.prototype.getInitState = function(accessory) {
   accessory
     .getService(Service.SecuritySystem)
     .setCharacteristic(Snapshot, 0);
-
-  return accessory;
 }
 
 // Method to get the current state
