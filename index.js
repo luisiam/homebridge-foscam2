@@ -173,11 +173,11 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
     // Add custom snapshot switch
     newAccessory.getService(Service.SecuritySystem).addCharacteristic(Snapshot);
 
+    // Setup HomeKit accessory information
+    newAccessory = this.setAccessoryInfo(newAccessory);
+
     // Setup listeners for different security system events
     newAccessory = this.setService(newAccessory);
-
-    // Retrieve initial state
-    newAccessory = this.getInitState(newAccessory);
 
     // Register accessory in HomeKit
     this.api.registerPlatformAccessories("homebridge-foscam2", "Foscam2", [newAccessory]);
@@ -195,10 +195,10 @@ FoscamPlatform.prototype.configureCamera = function(camera) {
     newAccessory.context.port = camera.port;
     newAccessory.context.path = camera.path;
     newAccessory.context.conversion = conversion;
-
-    // Retrieve initial state
-    newAccessory = this.getInitState(newAccessory);
   }
+
+  // Retrieve initial state
+  newAccessory = this.getInitState(newAccessory);
 
   // Store accessory in cache
   this.accessories[camera.mac] = newAccessory;
@@ -246,8 +246,8 @@ FoscamPlatform.prototype.setService = function(accessory) {
   return accessory;
 }
 
-// Method to retrieve initial state
-FoscamPlatform.prototype.getInitState = function(accessory) {
+// Method to setup HomeKit accessory information
+FoscamPlatform.prototype.setAccessoryInfo = function(accessory) {
   var mac = accessory.context.mac;
 
   accessory
@@ -258,7 +258,19 @@ FoscamPlatform.prototype.getInitState = function(accessory) {
     accessory
       .getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Model, this.cameraInfo[mac].model)
-      .setCharacteristic(Characteristic.SerialNumber, this.cameraInfo[mac].serial)
+      .setCharacteristic(Characteristic.SerialNumber, this.cameraInfo[mac].serial);
+  }
+
+  return accessory;
+}
+
+// Method to retrieve initial state
+FoscamPlatform.prototype.getInitState = function(accessory) {
+  var mac = accessory.context.mac;
+
+  if (this.cameraInfo[mac]) {
+    accessory
+      .getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.FirmwareRevision, this.cameraInfo[mac].fw)
       .setCharacteristic(Characteristic.HardwareRevision, this.cameraInfo[mac].hw);
   }
@@ -275,7 +287,7 @@ FoscamPlatform.prototype.getInitState = function(accessory) {
 
   accessory
     .getService(Service.SecuritySystem)
-    .setCharacteristic(Snapshot, 0)
+    .setCharacteristic(Snapshot, 0);
 
   return accessory;
 }
