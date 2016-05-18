@@ -220,13 +220,13 @@ FoscamPlatform.prototype.setService = function(accessory) {
   accessory
     .getService(Service.SecuritySystem)
     .getCharacteristic(Characteristic.SecuritySystemTargetState)
-    .on('get', this.getTargetState.bind(this, accessory.context.currentState))
+    .on('get', this.getTargetState.bind(this, accessory.context))
     .on('set', this.setTargetState.bind(this, accessory.context, accessory.displayName));
 
   accessory
     .getService(Service.SecuritySystem)
     .getCharacteristic(Characteristic.StatusFault)
-    .on('get', this.getStatusFault.bind(this, accessory.context.statusFault));
+    .on('get', this.getStatusFault.bind(this, accessory.context));
 
   accessory
     .getService(Service.SecuritySystem)
@@ -324,9 +324,9 @@ FoscamPlatform.prototype.getCurrentState = function(data, name, callback) {
 }
 
 // Method to get the target state
-FoscamPlatform.prototype.getTargetState = function(currentState, callback) {
+FoscamPlatform.prototype.getTargetState = function(data, callback) {
   setTimeout(function() {
-    callback(null, currentState);
+    callback(null, data.currentState);
   }, 1000);
 }
 
@@ -380,9 +380,9 @@ FoscamPlatform.prototype.setTargetState = function(data, name, state, callback) 
 }
 
 // Method to get the status fault
-FoscamPlatform.prototype.getStatusFault = function(statusFault, callback) {
+FoscamPlatform.prototype.getStatusFault = function(data, callback) {
   setTimeout(function() {
-    callback(null, statusFault);
+    callback(null, data.statusFault);
   }, 1000);
 }
 
