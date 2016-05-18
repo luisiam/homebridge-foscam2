@@ -215,27 +215,27 @@ FoscamPlatform.prototype.setService = function(accessory) {
   accessory
     .getService(Service.SecuritySystem)
     .getCharacteristic(Characteristic.SecuritySystemCurrentState)
-    .on('get', this.getCurrentState.bind(this, accessory.context, accessory.displayName));
+    .on('get', this.getCurrentState.bind(this, accessory));
 
   accessory
     .getService(Service.SecuritySystem)
     .getCharacteristic(Characteristic.SecuritySystemTargetState)
-    .on('get', this.getTargetState.bind(this, accessory.context))
-    .on('set', this.setTargetState.bind(this, accessory.context, accessory.displayName));
+    .on('get', this.getTargetState.bind(this, accessory))
+    .on('set', this.setTargetState.bind(this, accessory));
 
   accessory
     .getService(Service.SecuritySystem)
     .getCharacteristic(Characteristic.StatusFault)
-    .on('get', this.getStatusFault.bind(this, accessory.context));
+    .on('get', this.getStatusFault.bind(this, accessory));
 
   accessory
     .getService(Service.SecuritySystem)
     .getCharacteristic(Snapshot)
     .on('get', this.resetSwitch.bind(this))
-    .on('set', this.takeSnapshot.bind(this, accessory.context, accessory.displayName));
+    .on('set', this.takeSnapshot.bind(this, accessory));
 
   accessory
-    .on('identify', this.identify.bind(this, accessory.displayName));
+    .on('identify', this.identify.bind(this, accessory));
 }
 
 // Method to setup HomeKit accessory information
@@ -281,66 +281,70 @@ FoscamPlatform.prototype.getInitState = function(accessory) {
 }
 
 // Method to get the current state
-FoscamPlatform.prototype.getCurrentState = function(data, name, callback) {
+FoscamPlatform.prototype.getCurrentState = function(accessory, callback) {
   var self = this;
+  var thisCamera = accessory.context;
+  var name = accessory.displayName;
 
   // Setup the correct promise to use
-  if (this.cameraInfo[data.mac].ver == 0) {
-    var getConfig = this.foscamAPI[data.mac].getMotionDetectConfig();
+  if (this.cameraInfo[thisCamera.mac].ver == 0) {
+    var getConfig = this.foscamAPI[thisCamera.mac].getMotionDetectConfig();
   } else {
-    var getConfig = this.foscamAPI[data.mac].getMotionDetectConfig1();
+    var getConfig = this.foscamAPI[thisCamera.mac].getMotionDetectConfig1();
   }
 
   getConfig.then(function(config) {
     if (config.result == 0) {
       // Compute current state and target state
       if (config.isEnable == 0) {
-        data.currentState = Characteristic.SecuritySystemCurrentState.DISARMED;
+        thisCamera.currentState = Characteristic.SecuritySystemCurrentState.DISARMED;
       } else {
-        if (data.conversion.indexOf(config.linkage) >= 0) {
-          data.currentState = data.conversion.indexOf(config.linkage);
+        if (thisCamera.conversion.indexOf(config.linkage) >= 0) {
+          thisCamera.currentState = thisCamera.conversion.indexOf(config.linkage);
         } else {
-          data.currentState = Characteristic.SecuritySystemCurrentState.STAY_ARM;
+          thisCamera.currentState = Characteristic.SecuritySystemCurrentState.STAY_ARM;
         }
       }
 
       // Set status fault
-      data.statusFault = 0;
+      thisCamera.statusFault = 0;
 
-      self.log("[" + name + "] Current state: " + self.armState[data.currentState]);
-      callback(null, data.currentState);
+      self.log("[" + name + "] Current state: " + self.armState[thisCamera.currentState]);
+      callback(null, thisCamera.currentState);
     } else {
       // Set status fault to 1 in case of error
-      data.statusFault = 1;
+      thisCamera.statusFault = 1;
       callback(new Error("Failed to retrieve current state!"));
     }
   })
   .catch(function(error) {
     // Set status fault to 1 in case of error
-    data.statusFault = 1;
+    thisCamera.statusFault = 1;
 
     callback(error);
   });
 }
 
 // Method to get the target state
-FoscamPlatform.prototype.getTargetState = function(data, callback) {
+FoscamPlatform.prototype.getTargetState = function(accessory, callback) {
   setTimeout(function() {
-    callback(null, data.currentState);
+    callback(null, accessory.context.currentState);
   }, 1000);
 }
 
 // Method to set the target state
-FoscamPlatform.prototype.setTargetState = function(data, name, state, callback) {
+FoscamPlatform.prototype.setTargetState = function(accessory, state, callback) {
   var self = this;
+  var thisCamera = accessory.context;
+  var name = accessory.displayName;
 
   // Setup the correct promise and function to use
-  if (this.cameraInfo[data.mac].ver == 0) {
-    var getConfig = this.foscamAPI[data.mac].getMotionDetectConfig();
-    var setConfig = function(config) {self.foscamAPI[data.mac].setMotionDetectConfig(config);};
+  if (this.cameraInfo[thisCamera.mac].ver == 0) {
+    var getConfig = this.foscamAPI[thisCamera.mac].getMotionDetectConfig();
+    var setConfig = function(config) {self.foscamAPI[thisCamera.mac].setMotionDetectConfig(config);};
   } else {
-    var getConfig = this.foscamAPI[data.mac].getMotionDetectConfig1();
-    var setConfig = function(config) {self.foscamAPI[data.mac].setMotionDetectConfig1(config);};
+    var getConfig = this.foscamAPI[thisCamera.mac].getMotionDetectConfig1();
+    var setConfig = function(config) {self.foscamAPI[thisCamera.mac].setMotionDetectConfig1(config);};
   }
 
   // Convert target state to isEnable
@@ -351,16 +355,16 @@ FoscamPlatform.prototype.setTargetState = function(data, name, state, callback) 
     if (config.result == 0) {
       // Change isEnable and linkage to requested state
       config.isEnable = enable;
-      if (enable) config.linkage = data.conversion[state];
+      if (enable) config.linkage = thisCamera.conversion[state];
 
       // Update config with requested state
       setConfig(config);
 
       // Set status fault
-      data.statusFault = 0;
+      thisCamera.statusFault = 0;
 
       // Set current state
-      self.accessories[data.mac]
+      accessory
         .getService(Service.SecuritySystem)
         .setCharacteristic(Characteristic.SecuritySystemCurrentState, state);
 
@@ -368,37 +372,39 @@ FoscamPlatform.prototype.setTargetState = function(data, name, state, callback) 
       callback(null);
     } else {
       // Set status fault to 1 in case of error
-      data.statusFault = 1;
+      thisCamera.statusFault = 1;
       callback(new Error("Failed to set target state!"));
     }
   })
   .catch(function(error) {
     // Set status fault to 1 in case of error
-    data.statusFault = 1;
+    thisCamera.statusFault = 1;
     callback(error);
   });
 }
 
 // Method to get the status fault
-FoscamPlatform.prototype.getStatusFault = function(data, callback) {
+FoscamPlatform.prototype.getStatusFault = function(accessory, callback) {
   setTimeout(function() {
-    callback(null, data.statusFault);
+    callback(null, accessory.context.statusFault);
   }, 1000);
 }
 
 // Method to take snapshots
-FoscamPlatform.prototype.takeSnapshot = function(data, name, snapshot, callback) {
+FoscamPlatform.prototype.takeSnapshot = function(accessory, snapshot, callback) {
   if (snapshot) {
     var self = this;
+    var thisCamera = accessory.context;
+    var name = accessory.displayName;
 
-    this.foscamAPI[data.mac].snapPicture2().then(function(jpeg) {
+    this.foscamAPI[thisCamera.mac].snapPicture2().then(function(jpeg) {
       // Create directory for snapshots
-      mkdirp(data.path, function(error) {
+      mkdirp(thisCamera.path, function(error) {
         if (!error) {
           var timeStamp = new Date();
 
           // Write data as jpeg file to predefined directory
-          fs.writeFile(data.path + "/snap_" + timeStamp.valueOf() + ".jpeg", jpeg, function(error) {
+          fs.writeFile(thisCamera.path + "/snap_" + timeStamp.valueOf() + ".jpeg", jpeg, function(error) {
             if (!error) {
               self.log("[" + name + "] Took a snapshot.");
             } else {
@@ -415,11 +421,11 @@ FoscamPlatform.prototype.takeSnapshot = function(data, name, snapshot, callback)
     });
 
     // Set switch back to off after 1s
-    setTimeout(function(mac) {
-      this.accessories[mac]
+    setTimeout(function(accessory) {
+      accessory
         .getService(Service.SecuritySystem)
         .setCharacteristic(Snapshot, 0);
-    }.bind(this, data.mac), 1000);
+    }.bind(this, accessory), 1000);
   }
 
   callback(null);
@@ -431,8 +437,8 @@ FoscamPlatform.prototype.resetSwitch = function(callback) {
 }
 
 // Method to handle identify request
-FoscamPlatform.prototype.identify = function(name, paired, callback) {
-  this.log("[" + name + "] Identify requested!");
+FoscamPlatform.prototype.identify = function(accessory, paired, callback) {
+  this.log("[" + accessory.displayName + "] Identify requested!");
   callback();
 }
 
