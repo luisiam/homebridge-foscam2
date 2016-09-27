@@ -1,7 +1,7 @@
 # homebridge-foscam2
 Foscam Plugin for [HomeBridge](https://github.com/nfarina/homebridge) (API 2.0)
 
-Older verion with API 1.0: [homebridge-foscam](https://github.com/rooi/homebridge-foscam)
+Older verion using API 1.0: [homebridge-foscam](https://github.com/rooi/homebridge-foscam)
 
 # Installation
 1. Install homebridge using `npm install -g homebridge`.
