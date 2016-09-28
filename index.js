@@ -329,7 +329,7 @@ FoscamPlatform.prototype.getCurrentState = function(accessory, callback) {
 FoscamPlatform.prototype.getTargetState = function(accessory, callback) {
   setTimeout(function() {
     callback(null, accessory.context.currentState);
-  }, 1000);
+  }, 500);
 }
 
 // Method to set the target state
@@ -387,7 +387,7 @@ FoscamPlatform.prototype.setTargetState = function(accessory, state, callback) {
 FoscamPlatform.prototype.getStatusFault = function(accessory, callback) {
   setTimeout(function() {
     callback(null, accessory.context.statusFault);
-  }, 1000);
+  }, 500);
 }
 
 // Method to take snapshots
